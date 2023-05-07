@@ -1,10 +1,10 @@
 import logging
 
-from ..clients.clients import ExchangeType
-from ..order.ordertype import OrderTypes
-from ..order.orderpackage import OrderPackageType, BaseOrder
 from . import BaseControl
 from .. import utils, config
+from ..clients.clients import ExchangeType
+from ..order.orderpackage import OrderPackageType, BaseOrder
+from ..order.ordertype import OrderTypes
 from ..streams.orderstream import OrderStream
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class OrderValidation(BaseControl):
             self._on_error(order, "Order price is None")
         if order.order_type.price_ladder_definition == "CLASSIC":
             if utils.as_dec(order.order_type.price) not in utils.PRICES:
-                self._on_error(order, "Order price is not valid for CLASSIC ladder")
+                self._on_error(order, f"Order price is not valid for CLASSIC ladder {order}")
         elif order.order_type.price_ladder_definition == "FINEST":
             if utils.as_dec(order.order_type.price) not in utils.FINEST_PRICES:
                 self._on_error(order, "Order price is not valid for FINEST ladder")
