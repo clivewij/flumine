@@ -1,16 +1,17 @@
 import time
 import logging
-from typing import Union, Iterator
+from typing import Union, Iterator, Type
 
 from ..strategy.strategy import BaseStrategy
 from .marketstream import MarketStream
 from .sportsdatastream import SportsDataStream
-from .datastream import DataStream
+from .datastream import DataStream, OrderDataStream
 from .historicalstream import HistoricalStream
 from .orderstream import OrderStream
 from .simulatedorderstream import SimulatedOrderStream
 from ..clients import ExchangeType, BaseClient
 from ..utils import get_file_md
+from .marketstream import BaseStream
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,7 @@ class Streams:
                     )
                 )
             elif markets is None and events is None:
-                logger.warning(
-                    "No markets or events found for strategy {0}".format(strategy)
-                )
+                logger.warning("No markets or events found for strategy {0}".format(strategy))
             elif markets:
                 # order markets by name as an attempt to process in chronological order
                 markets.sort()
@@ -50,19 +49,13 @@ class Streams:
                             "Skipping market %s (%s) for strategy %s due to marketType filter"
                             % (market, market_type, strategy)
                         )
-                    elif (
-                        country_codes
-                        and country_code
-                        and country_code not in country_codes
-                    ):
+                    elif country_codes and country_code and country_code not in country_codes:
                         logger.warning(
                             "Skipping market %s (%s) for strategy %s due to countryCode filter"
                             % (market, country_code, strategy)
                         )
                     else:
-                        stream = self.add_historical_stream(
-                            strategy, market, event_processing, **listener_kwargs
-                        )
+                        stream = self.add_historical_stream(strategy, market, event_processing, **listener_kwargs)
                         strategy.streams.append(stream)
                         strategy.historic_stream_ids.append(stream.stream_id)
             elif events:
@@ -79,6 +72,16 @@ class Streams:
 
     """ market data """
 
+    @staticmethod
+    def _types_can_share_streams(stream: BaseStream, other: Type[BaseStream]) -> bool:
+        """Return whether two streams can be proxies for each other."""
+        if isinstance(stream, other):
+            return True
+        for type1, type2 in ((MarketStream, DataStream), (OrderStream, OrderDataStream)):
+            if (isinstance(stream, type1) and other is type2) or (isinstance(stream, type2) and other is type1):
+                return True
+        return False
+
     def add_stream(self, strategy: BaseStrategy) -> None:
         # markets
         if isinstance(strategy.market_filter, dict) or strategy.market_filter is None:
@@ -88,25 +91,21 @@ class Streams:
         for market_filter in market_filters:
             for stream in self:  # check if market stream already exists
                 if (
-                    isinstance(stream, strategy.stream_class)
+                    self._types_can_share_streams(stream, strategy.stream_class)
                     and stream.market_filter == market_filter
                     and stream.market_data_filter == strategy.market_data_filter
                     and stream.streaming_timeout == strategy.streaming_timeout
                     and stream.conflate_ms == strategy.conflate_ms
                 ):
                     logger.info(
-                        "Using {0} ({1}) for strategy {2}".format(
-                            strategy.stream_class, stream.stream_id, strategy
-                        )
+                        "Using {0} ({1}) for strategy {2}".format(strategy.stream_class, stream.stream_id, strategy)
                     )
                     strategy.streams.append(stream)
                     break
             else:  # nope? lets create a new one
                 stream_id = self._increment_stream_id()
                 logger.info(
-                    "Creating new {0} ({1}) for strategy {2}".format(
-                        strategy.stream_class, stream_id, strategy
-                    )
+                    "Creating new {0} ({1}) for strategy {2}".format(strategy.stream_class, stream_id, strategy)
                 )
                 stream = strategy.stream_class(
                     flumine=self.flumine,
@@ -127,18 +126,14 @@ class Streams:
                     and stream.streaming_timeout == strategy.streaming_timeout
                 ):
                     logger.info(
-                        "Using {0} ({1}) for strategy {2}".format(
-                            strategy.stream_class, stream.stream_id, strategy
-                        )
+                        "Using {0} ({1}) for strategy {2}".format(strategy.stream_class, stream.stream_id, strategy)
                     )
                     strategy.streams.append(stream)
                     break
             else:  # nope? lets create a new one
                 stream_id = self._increment_stream_id()
                 logger.info(
-                    "Creating new {0} ({1}) for strategy {2}".format(
-                        strategy.stream_class, stream_id, strategy
-                    )
+                    "Creating new {0} ({1}) for strategy {2}".format(strategy.stream_class, stream_id, strategy)
                 )
                 stream = SportsDataStream(
                     flumine=self.flumine,
@@ -150,11 +145,7 @@ class Streams:
                 strategy.streams.append(stream)
 
     def add_historical_stream(
-        self,
-        strategy: BaseStrategy,
-        market: str,
-        event_processing: bool,
-        **listener_kwargs
+        self, strategy: BaseStrategy, market: str, event_processing: bool, **listener_kwargs
     ) -> HistoricalStream:
         for stream in self:
             if (
@@ -169,9 +160,7 @@ class Streams:
             if event_processing and event_id is None:
                 logger.warning("EventId not found for market %s" % market)
             logger.info(
-                "Creating new {0} ({1}) for strategy {2}".format(
-                    HistoricalStream.__name__, stream_id, strategy
-                ),
+                "Creating new {0} ({1}) for strategy {2}".format(HistoricalStream.__name__, stream_id, strategy),
                 extra={
                     "strategy": strategy,
                     "stream_id": stream_id,
@@ -220,9 +209,7 @@ class Streams:
         conflate_ms: int = None,
         streaming_timeout: float = 0.25,
     ) -> SimulatedOrderStream:
-        logger.warning(
-            "Client {0} now paper trading".format(client.betting_client.username)
-        )
+        logger.warning("Client {0} now paper trading".format(client.betting_client.username))
         stream_id = self._increment_stream_id()
         stream = SimulatedOrderStream(
             flumine=self.flumine,
